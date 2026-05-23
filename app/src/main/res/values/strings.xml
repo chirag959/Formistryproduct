@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CallVault</string>
+    <string name="notification_channel_recording">Active call recording</string>
+    <string name="notification_channel_sync">Drive sync &amp; transcription</string>
+    <string name="notification_recording_title">Recording call</string>
+    <string name="notification_recording_text">CallVault is capturing this call</string>
+    <string name="notification_listener_label">CallVault — WhatsApp call detection</string>
+    <string name="accessibility_service_label">CallVault — call routing helper</string>
+    <string name="accessibility_service_description">Used to route audio for in-call recording on Android 10+.</string>
+</resources>
