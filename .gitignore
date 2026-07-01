@@ -21,6 +21,8 @@ keystore.properties
 release/
 google-services.json
 secrets.properties
+# But keep the example checked in
+!secrets.properties.example
 
 # Logs
 *.log

@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+val secrets = Properties().apply {
+    val file = rootProject.file("app/secrets.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+fun secret(key: String, default: String = ""): String =
+    secrets.getProperty(key) ?: System.getenv(key) ?: default
 
 android {
     namespace = "com.hypemarketer.callvault"
@@ -21,6 +30,12 @@ android {
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
         }
+
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${secret("GEMINI_API_KEY")}\"",
+        )
     }
 
     buildTypes {

@@ -14,7 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,6 +51,8 @@ fun LibraryScreen(
 ) {
     val recordings by vm.recordings.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
+    val testState by vm.testRecording.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -57,6 +63,18 @@ fun LibraryScreen(
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
+            )
+        },
+        floatingActionButton = {
+            val label = when (val s = testState) {
+                is TestRecordingState.Idle -> "Test record 10s"
+                is TestRecordingState.Recording -> "Recording ${s.seconds}s…"
+                is TestRecordingState.Error -> "Error — tap to retry"
+            }
+            ExtendedFloatingActionButton(
+                onClick = { vm.startTestRecording(context) },
+                icon = { Icon(Icons.Filled.FiberManualRecord, contentDescription = null) },
+                text = { Text(label) },
             )
         },
     ) { inner ->
@@ -72,7 +90,7 @@ fun LibraryScreen(
             if (recordings.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        "No recordings yet.\nMake or receive a call to test.",
+                        "No recordings yet.\nTap “Test record 10s” to try the pipeline,\nor make a call.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -83,6 +101,7 @@ fun LibraryScreen(
                             rec = rec,
                             onOpen = { onOpenRecording(rec.id) },
                             onDelete = { vm.delete(rec.id) },
+                            onRetryTranscription = { vm.retryTranscription(rec.id) },
                         )
                         HorizontalDivider()
                     }
@@ -97,6 +116,7 @@ private fun RecordingRow(
     rec: RecordingEntity,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    onRetryTranscription: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(16.dp),
@@ -115,6 +135,11 @@ private fun RecordingRow(
             )
         }
         Spacer(Modifier.height(0.dp))
+        if (rec.transcriptStatus == TranscriptStatus.FAILED) {
+            IconButton(onClick = onRetryTranscription) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Retry transcription")
+            }
+        }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = "Delete")
         }

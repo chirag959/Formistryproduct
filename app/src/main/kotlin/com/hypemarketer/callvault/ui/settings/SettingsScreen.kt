@@ -36,15 +36,24 @@ fun SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier.padding(inner).fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Stubs for Phase 5", style = MaterialTheme.typography.titleMedium)
+            Text("What's wired", style = MaterialTheme.typography.titleMedium)
             Text(
-                "• Google sign-in for Drive\n" +
-                    "• Drive folder picker (default CallVault/)\n" +
-                    "• Gemini API key entry (or shared team key)\n" +
-                    "• Auto-record toggles: Phone calls / WhatsApp calls\n" +
-                    "• Force speakerphone toggle\n" +
+                "✓ Phone call auto-recording (Phase 1)\n" +
+                    "✓ Local library + search\n" +
+                    "✓ Gemini 2.5 Flash transcription — reads key from BuildConfig " +
+                    "(app/secrets.properties → GEMINI_API_KEY)",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("Still to build", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "• Google sign-in for Drive + resumable upload (Phase 2)\n" +
+                    "• WhatsApp call capture via MediaProjection (Phase 3)\n" +
+                    "• Drive folder picker (default CallVault/YYYY-MM/)\n" +
+                    "• Runtime Gemini key entry via EncryptedSharedPreferences\n" +
+                    "• Auto-record toggles: Phone / WhatsApp\n" +
+                    "• Force-speakerphone toggle\n" +
                     "• Local retention (auto-delete after N days)\n" +
-                    "• Consent disclaimer (PRD §10 legal risk)",
+                    "• Consent disclaimer (PRD §10)",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
