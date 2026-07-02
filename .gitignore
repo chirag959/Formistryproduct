@@ -1,0 +1,26 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+npm-debug.log*
+
+# DB dumps / backups
+backups/
+*.sql
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
