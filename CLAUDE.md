@@ -47,9 +47,15 @@ banquet leads or GCC import/export buyers without a rewrite.
 | Backend | Python + FastAPI (async) |
 | Frontend | React (Vite) |
 | DB | PostgreSQL |
-| WhatsApp | Meta WhatsApp Cloud API (direct, no BSP) |
+| WhatsApp | **AiSensy** Campaign API (BSP on Meta Cloud API) — see decision below |
 | Background jobs | FastAPI `BackgroundTasks` (Celery+Redis only if volume later demands) |
 | Deploy | Docker + Docker Compose (api + db + frontend) |
+
+> **WhatsApp provider (supersedes PRD §3):** the PRD specified Meta Cloud API
+> *direct, no BSP*. Per the owner, sending goes through **AiSensy** (a BSP on
+> Meta) instead. Sends use AiSensy's Campaign API (a "Live" API campaign
+> referenced by name + `templateParams`); replies/status arrive via AiSensy's
+> webhook. Everything else (multi-tenancy, ROI, guardrails) is unchanged.
 
 ---
 
@@ -97,8 +103,10 @@ banquet leads or GCC import/export buyers without a rewrite.
 
 All business tables carry `workspace_id`. Fields may be *added*, not removed.
 
-- **workspaces** — id, name, whatsapp_phone_number_id, lapsed_threshold_days
-  (default 45), avg_ticket, created_at
+- **workspaces** — id, name, whatsapp_phone_number_id (informational),
+  aisensy_api_key (per-workspace, overrides global env key; secret — never
+  returned in API responses), lapsed_threshold_days (default 45), avg_ticket,
+  created_at
 - **users** — id, workspace_id (nullable → agency admin), email, password_hash,
   role (`admin` | `staff`), created_at
 - **contacts** — id, workspace_id, name, phone (E.164), last_visit_date,
@@ -125,8 +133,7 @@ POST   /workspaces/{id}/contacts/upload   (CSV: name, phone, last_visit_date)
 GET    /workspaces/{id}/contacts/lapsed
 POST   /workspaces/{id}/campaigns         (create + send to lapsed)
 GET    /workspaces/{id}/campaigns/{cid}   (status + ROI)
-POST   /webhooks/whatsapp                 (Meta status + replies; verify signature)
-GET    /webhooks/whatsapp                 (Meta verify handshake)
+POST   /webhooks/aisensy?token=…          (AiSensy status + replies; token-gated)
 ```
 
 Every `/workspaces/{id}/...` endpoint enforces that the caller belongs to (or is
@@ -160,14 +167,26 @@ Functional over fancy. "A tool that prints a receipt, not a design showcase."
 
 ---
 
-## 9. WhatsApp integration notes (not code)
+## 9. WhatsApp integration notes (not code) — via AiSensy
 
-- Requires a Meta Business account + WhatsApp number on the Cloud API.
-- Templates (Marketing category) must be **pre-approved by Meta** — recipients
-  did not message first. Keep copy clean.
-- Webhook needs a **public HTTPS URL** (ngrok in dev, real domain in prod).
-- Verify Meta's current per-message pricing before quoting a client — do not
-  hardcode pricing assumptions.
+- Sending: `POST {AISENSY_API_BASE}/campaign/t1/api/v2` with `apiKey`,
+  `campaignName` (a **Live** API campaign in AiSensy, bound to an approved
+  template), `destination`, `userName`, `templateParams` (fills the template's
+  variables; v1 sends a single discount/offer). Our `campaigns.template_name`
+  column stores the AiSensy campaign name.
+- API key resolves per-workspace first (`workspaces.aisensy_api_key`), else the
+  global `AISENSY_API_KEY` env fallback.
+- Templates (Marketing category) must still be **pre-approved by Meta** (through
+  AiSensy) — recipients did not message first. Keep copy clean.
+- AiSensy's send response carries **no WhatsApp message id**, so webhook
+  status/replies match by **phone within the workspace**, applied to the
+  contact's most recent message.
+- Webhook: `POST /webhooks/aisensy?token=…` — gated on `AISENSY_WEBHOOK_TOKEN`
+  (AiSensy does not sign callbacks like Meta). Needs a **public HTTPS URL**
+  (ngrok in dev). Payload parsing is defensive; tighten once a real sample is
+  captured.
+- Verify current per-message pricing (Meta rate + AiSensy markup) before quoting
+  a client — do not hardcode pricing assumptions.
 
 ---
 

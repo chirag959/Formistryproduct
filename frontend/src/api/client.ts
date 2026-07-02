@@ -75,8 +75,13 @@ export const api = {
     }),
 
   listWorkspaces: () => request<Workspace[]>("/workspaces"),
-  createWorkspace: (body: Partial<Workspace>) =>
-    request<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(body) }),
+  createWorkspace: (body: {
+    name: string;
+    whatsapp_phone_number_id?: string | null;
+    aisensy_api_key?: string | null;
+    lapsed_threshold_days?: number;
+    avg_ticket?: number;
+  }) => request<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(body) }),
   getWorkspace: (id: number) => request<Workspace>(`/workspaces/${id}`),
 
   listContacts: (ws: number) => request<Contact[]>(`/workspaces/${ws}/contacts`),
@@ -113,6 +118,7 @@ export interface Workspace {
   lapsed_threshold_days: number;
   avg_ticket: number;
   created_at: string;
+  aisensy_configured: boolean;
 }
 export interface Contact {
   id: number;

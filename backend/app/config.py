@@ -23,14 +23,18 @@ class Settings(BaseSettings):
     seed_admin_email: str | None = None
     seed_admin_password: str | None = None
 
-    # --- WhatsApp Cloud API (Meta) ---
-    # Graph API version + token. Per-workspace phone_number_id lives in the DB.
-    whatsapp_api_base: str = "https://graph.facebook.com/v21.0"
-    whatsapp_access_token: str | None = None
-    # Token echoed back to Meta during the GET verify handshake.
-    whatsapp_verify_token: str | None = None
-    # App secret used to validate the X-Hub-Signature-256 header on callbacks.
-    whatsapp_app_secret: str | None = None
+    # --- WhatsApp via AiSensy (BSP on top of Meta Cloud API) ---
+    # AiSensy Campaign API base. Sends go to {base}/campaign/t1/api/v2.
+    aisensy_api_base: str = "https://backend.aisensy.com"
+    # Global API key fallback. A workspace may override with its own key
+    # (workspaces.aisensy_api_key) so each client's AiSensy project stays
+    # isolated — the per-workspace key always wins over this env default.
+    aisensy_api_key: str | None = None
+    # "source" tag attached to every send (shows up on the AiSensy contact).
+    aisensy_source: str = "rebooking-tool"
+    # Shared secret required on the inbound webhook (/webhooks/aisensy?token=).
+    # AiSensy does not sign callbacks the way Meta does, so we gate on this.
+    aisensy_webhook_token: str | None = None
 
     # --- CORS ---
     cors_origins: str = "*"  # comma-separated list, or * for all

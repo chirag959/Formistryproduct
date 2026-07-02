@@ -67,7 +67,7 @@ export default function CampaignResults() {
               <tr>
                 <th>Contact #</th>
                 <th>Status</th>
-                <th>WhatsApp id</th>
+                <th>AiSensy id</th>
                 <th>Detail</th>
                 <th>Booked</th>
               </tr>

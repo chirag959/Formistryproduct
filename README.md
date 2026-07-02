@@ -23,7 +23,7 @@ hardcoded to the salon vertical.
 | Backend | Python 3.11 · FastAPI · SQLAlchemy 2 |
 | Frontend | React 18 · Vite · TypeScript |
 | Database | PostgreSQL 16 |
-| WhatsApp | Meta WhatsApp Cloud API (direct) |
+| WhatsApp | **AiSensy** Campaign API (BSP on Meta Cloud API) |
 | Deploy | Docker Compose (`db` + `api` + `frontend`) |
 
 ---
@@ -76,53 +76,63 @@ npm run dev                               # http://localhost:5173 (proxies /api 
 
 1. **Sign in** as the agency admin.
 2. **Create a workspace** for the client (set lapsed threshold in days and the
-   average ticket in ₹; paste the WhatsApp `phone_number_id` from Meta).
+   average ticket in ₹; paste the client's **AiSensy API key** — or leave blank
+   to use the global `AISENSY_API_KEY`).
 3. **Upload contacts** — a CSV with columns `name, phone, last_visit_date`.
    Re-uploading the same phone updates the row (idempotent on
    `workspace_id + phone`); no duplicates.
 4. **Review lapsed contacts** — anyone past the threshold (or never seen) is
    highlighted.
-5. **New campaign** — pick an approved template name, set the discount/offer,
-   preview, and "Send to X lapsed contacts". Sending runs in the background.
+5. **New campaign** — enter the **AiSensy campaign name** (a Live API campaign
+   bound to an approved template), set the discount/offer, preview, and "Send to
+   X lapsed contacts". Sending runs in the background.
 6. **Campaign Results** — the ROI panel: sent / delivered / read / replied /
    booked + estimated revenue. Tick **booked** on the replies that became real
    bookings to drive the revenue number (`booked × avg ticket`).
 
 ---
 
-## WhatsApp Cloud API setup (required before sending)
+## AiSensy setup (required before sending)
 
-Sending and replies only work once Meta is wired up:
+We send through **AiSensy**, a BSP layered on Meta's WhatsApp Cloud API, rather
+than calling Meta directly. AiSensy handles the phone number, template approval,
+and (optionally) the reply webhook. (This is a deliberate departure from the
+PRD's "Meta direct, no BSP" line — see `CLAUDE.md`.)
 
-1. Create a **Meta Business account** and register a WhatsApp phone number on
-   the **Cloud API**. Note its `phone_number_id` → put it on the workspace.
-2. Generate a **system-user access token** with `whatsapp_business_messaging`
-   permission → `WHATSAPP_ACCESS_TOKEN`.
-3. Submit **Marketing-category message templates** for approval. Recipients did
-   NOT message first, so Meta must pre-approve the exact wording. Keep copy
-   clean — spammy copy gets rejected. Use the approved template's name in the
-   campaign form; a single `{{1}}` body variable receives the discount/offer.
-4. **Pricing:** Meta bills per message and moved to per-message rates in 2025.
-   Confirm current rates on Meta's official pricing page before quoting a
+1. In AiSensy, connect the client's **WhatsApp number** (this runs on Meta's
+   Cloud API under the hood) and get an **API key**
+   (dashboard → *Manage → API Key*). Put it on the workspace, or set
+   `AISENSY_API_KEY` as a global fallback.
+2. Get your **Meta-approved Marketing template** approved inside AiSensy.
+   Recipients did NOT message first, so the exact wording must be pre-approved;
+   keep copy clean. A single `{{1}}` body variable receives the discount/offer.
+3. Create an **API Campaign** in AiSensy bound to that template and set its
+   status to **Live**. The campaign's name is what you type into the "New
+   campaign" form here — it must match exactly.
+4. **Pricing:** WhatsApp bills per message (per-message rates since 2025) and
+   AiSensy adds its own plan/markup. Confirm current rates before quoting a
    client — nothing here hardcodes pricing.
 
 ### Webhook (replies + status updates)
 
-Meta callbacks need a **public HTTPS URL** — localhost cannot receive them.
+The send path is outbound and needs no public URL, but to capture **replies and
+delivery/read status** AiSensy must POST to a **public HTTPS URL**.
 
-- **Dev:** expose the API with ngrok:
-  ```bash
-  ngrok http 8000
-  ```
-  Then in Meta → WhatsApp → Configuration, set the callback URL to
-  `https://<your-ngrok-domain>/webhooks/whatsapp` and the **Verify Token** to
-  the value of `WHATSAPP_VERIFY_TOKEN`. Meta calls `GET /webhooks/whatsapp` and
-  the app echoes the challenge.
-- **Prod:** point a real domain at the API and use
-  `https://your-domain/webhooks/whatsapp`.
-- Every `POST /webhooks/whatsapp` is validated against
-  `X-Hub-Signature-256` using `WHATSAPP_APP_SECRET`; unsigned/invalid payloads
-  are rejected with 403.
+1. Set `AISENSY_WEBHOOK_TOKEN` to a random secret.
+2. In AiSensy, configure the project/live-chat webhook to:
+   `https://<your-host>/webhooks/aisensy?token=<AISENSY_WEBHOOK_TOKEN>`
+   - **Dev:** expose the API with `ngrok http 8000` and use the ngrok domain.
+   - **Prod:** use your real domain.
+3. Requests without the matching token are rejected with 403. Events are matched
+   to a contact by **phone within the workspace** (AiSensy's send response
+   carries no WhatsApp message id), then applied to that contact's most recent
+   message.
+
+> The AiSensy webhook payload schema sits behind a login-gated doc, so the
+> handler in `backend/app/routers/webhooks.py` parses the phone/status/text
+> defensively across the field names AiSensy is known to use (and also accepts a
+> raw Meta-style `entry[]` envelope). Paste a real sample payload and it can be
+> tightened.
 
 ### Sending guardrail
 
@@ -141,10 +151,10 @@ hardcoded or committed.
 | `DATABASE_URL` | Postgres DSN (compose builds it from `POSTGRES_*`) |
 | `JWT_SECRET` | Signs auth tokens — use a long random string |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Bootstrap agency admin on first run |
-| `WHATSAPP_API_BASE` | Graph API base, e.g. `https://graph.facebook.com/v21.0` |
-| `WHATSAPP_ACCESS_TOKEN` | Meta token used to send |
-| `WHATSAPP_VERIFY_TOKEN` | Echoed on the GET verify handshake |
-| `WHATSAPP_APP_SECRET` | Validates the webhook signature |
+| `AISENSY_API_BASE` | AiSensy API base, `https://backend.aisensy.com` |
+| `AISENSY_API_KEY` | Global fallback key; per-workspace key overrides it |
+| `AISENSY_SOURCE` | Source tag attached to each AiSensy contact |
+| `AISENSY_WEBHOOK_TOKEN` | Shared secret required on the inbound webhook |
 | `CORS_ORIGINS` | Comma-separated allowed origins, or `*` |
 
 ---
@@ -179,12 +189,11 @@ GET    /workspaces/{id}
 POST   /workspaces/{id}/contacts/upload         (CSV)
 GET    /workspaces/{id}/contacts
 GET    /workspaces/{id}/contacts/lapsed
-POST   /workspaces/{id}/campaigns               (create + send)
+POST   /workspaces/{id}/campaigns               (create + send via AiSensy)
 GET    /workspaces/{id}/campaigns
 GET    /workspaces/{id}/campaigns/{cid}         (status + ROI)
 POST   /workspaces/{id}/campaigns/{cid}/messages/{mid}/booked
-GET    /webhooks/whatsapp                        (Meta verify handshake)
-POST   /webhooks/whatsapp                        (Meta status + replies)
+POST   /webhooks/aisensy?token=…                (AiSensy status + replies)
 ```
 
 Every `/workspaces/{id}/…` route enforces tenant scoping: a workspace user can

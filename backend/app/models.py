@@ -47,7 +47,12 @@ class Workspace(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Informational: the WhatsApp number on Meta (kept per PRD schema).
     whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(64))
+    # Per-workspace AiSensy API key; overrides the global env key so each
+    # client's AiSensy project stays isolated. Secret — never returned in API
+    # responses (WorkspaceOut exposes only aisensy_configured).
+    aisensy_api_key: Mapped[str | None] = mapped_column(String(512))
     lapsed_threshold_days: Mapped[int] = mapped_column(Integer, default=45, nullable=False)
     avg_ticket: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -49,7 +49,7 @@ export default function NewCampaign() {
 
       <form className="card" onSubmit={submit}>
         <div className="field">
-          <label>Approved WhatsApp template name</label>
+          <label>AiSensy campaign name</label>
           <input
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
@@ -57,7 +57,8 @@ export default function NewCampaign() {
             required
           />
           <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Must exactly match a Marketing template approved in your Meta account.
+            Must exactly match a <strong>Live</strong> API campaign in your AiSensy
+            dashboard (bound to a Meta-approved template).
           </p>
         </div>
         <div className="field">

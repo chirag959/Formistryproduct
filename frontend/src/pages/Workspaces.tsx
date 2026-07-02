@@ -41,8 +41,13 @@ export default function Workspaces() {
             <p className="muted" style={{ fontSize: 13 }}>
               Lapsed after {w.lapsed_threshold_days} days · Avg ticket ₹{w.avg_ticket}
             </p>
-            <p className="muted" style={{ fontSize: 12 }}>
-              WhatsApp #: {w.whatsapp_phone_number_id || <em>not set</em>}
+            <p style={{ fontSize: 12 }}>
+              AiSensy:{" "}
+              {w.aisensy_configured ? (
+                <span className="badge replied">connected</span>
+              ) : (
+                <span className="badge failed">not set</span>
+              )}
             </p>
             <Link to={`/workspaces/${w.id}/contacts`}>
               <button className="primary" style={{ marginTop: 6 }}>Open →</button>
@@ -57,6 +62,7 @@ export default function Workspaces() {
 function NewWorkspace({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
   const [phoneId, setPhoneId] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [threshold, setThreshold] = useState(45);
   const [avgTicket, setAvgTicket] = useState(0);
   const [error, setError] = useState("");
@@ -68,6 +74,7 @@ function NewWorkspace({ onCreated }: { onCreated: () => void }) {
       await api.createWorkspace({
         name,
         whatsapp_phone_number_id: phoneId || null,
+        aisensy_api_key: apiKey || null,
         lapsed_threshold_days: Number(threshold),
         avg_ticket: Number(avgTicket),
       });
@@ -86,9 +93,18 @@ function NewWorkspace({ onCreated }: { onCreated: () => void }) {
           <input value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div className="field">
-          <label>WhatsApp phone number id</label>
+          <label>WhatsApp phone number id (optional)</label>
           <input value={phoneId} onChange={(e) => setPhoneId(e.target.value)} placeholder="from Meta" />
         </div>
+      </div>
+      <div className="field">
+        <label>AiSensy API key</label>
+        <input
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          type="password"
+          placeholder="from AiSensy dashboard → Manage → API Key (leave blank to use the global key)"
+        />
       </div>
       <div className="row">
         <div className="field">

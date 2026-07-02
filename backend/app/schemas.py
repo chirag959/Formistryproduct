@@ -35,6 +35,7 @@ class UserOut(ORM):
 class WorkspaceCreate(BaseModel):
     name: str
     whatsapp_phone_number_id: str | None = None
+    aisensy_api_key: str | None = None  # write-only; never echoed back
     lapsed_threshold_days: int = 45
     avg_ticket: float = 0.0
 
@@ -46,6 +47,14 @@ class WorkspaceOut(ORM):
     lapsed_threshold_days: int
     avg_ticket: float
     created_at: datetime
+    # Derived flag so the UI knows sending is wired up without leaking the key.
+    aisensy_configured: bool = False
+
+    @classmethod
+    def from_workspace(cls, ws, *, env_key_present: bool) -> "WorkspaceOut":
+        data = cls.model_validate(ws)
+        data.aisensy_configured = bool(ws.aisensy_api_key) or env_key_present
+        return data
 
 
 # --- Contacts ---

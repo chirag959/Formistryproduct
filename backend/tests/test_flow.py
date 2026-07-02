@@ -1,7 +1,6 @@
-"""End-to-end: send campaign (mocked Meta) → webhook status/reply → booked ROI."""
-import hashlib
-import hmac
+"""End-to-end: send via AiSensy (mocked) → webhook status/reply → booked ROI."""
 import json
+
 from datetime import date, timedelta
 
 from app.config import get_settings
@@ -12,26 +11,21 @@ def _csv(rows):
     return ("name,phone,last_visit_date\n" + "\n".join(rows)).encode()
 
 
-def _sign(body: bytes, secret: str) -> str:
-    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-
-
 def test_full_campaign_flow(client, seeded, monkeypatch):
     settings = get_settings()
-    # Configure WhatsApp for the duration of this test.
-    monkeypatch.setattr(settings, "whatsapp_access_token", "TESTTOKEN")
-    monkeypatch.setattr(settings, "whatsapp_app_secret", "APPSECRET")
+    # Configure AiSensy (global key) + webhook token for this test.
+    monkeypatch.setattr(settings, "aisensy_api_key", "TESTKEY")
+    monkeypatch.setattr(settings, "aisensy_webhook_token", "WHTOKEN")
 
     sent = {}
 
-    def fake_send(*, phone_number_id, to_phone, template_name, language_code="en", body_params=None):
-        wamid = f"wamid.{to_phone}"
-        sent[to_phone] = wamid
-        return wamid
+    def fake_send(*, api_key, campaign_name, destination, user_name=None, template_params=None):
+        assert api_key == "TESTKEY"
+        assert campaign_name == "winback_v1"
+        sent[destination] = template_params
+        return None  # AiSensy often returns no message id
 
-    # Patch where it's used (campaigns router imported the symbols).
-    monkeypatch.setattr("app.routers.campaigns.is_configured", lambda: True)
-    monkeypatch.setattr("app.routers.campaigns.send_template", fake_send)
+    monkeypatch.setattr("app.routers.campaigns.send_campaign_message", fake_send)
 
     hdr = login(client, seeded["admin_a"])
     ws = seeded["ws_a"]
@@ -48,51 +42,35 @@ def test_full_campaign_flow(client, seeded, monkeypatch):
         json={"template_name": "winback_v1", "discount_offer": "20% off"},
         headers=hdr,
     )
-    assert r.status_code == 201
+    assert r.status_code == 201, r.text
     cid = r.json()["id"]
-    assert sent  # the mocked send was called
+    assert sent == {"+919876543210": ["20% off"]}
 
     roi = client.get(f"/workspaces/{ws}/campaigns/{cid}", headers=hdr).json()
-    assert roi["sent"] == 1
-    assert roi["failed"] == 0
-    wamid = roi["messages"][0]["whatsapp_message_id"]
+    assert roi["sent"] == 1 and roi["failed"] == 0
 
-    # --- Webhook: delivered status ---
-    delivered = json.dumps(
-        {"entry": [{"changes": [{"value": {"statuses": [{"id": wamid, "status": "delivered"}]}}]}]}
-    ).encode()
-    r = client.post(
-        "/webhooks/whatsapp", content=delivered,
-        headers={"X-Hub-Signature-256": _sign(delivered, "APPSECRET"), "Content-Type": "application/json"},
-    )
-    assert r.status_code == 200
+    def post_webhook(body: dict, token="WHTOKEN"):
+        return client.post(
+            f"/webhooks/aisensy?token={token}",
+            content=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+
+    # --- Bad token rejected ---
+    assert post_webhook({"waId": "919876543210", "status": "delivered"}, token="nope").status_code == 403
+
+    # --- Delivered status (matched by phone, no wamid) ---
+    assert post_webhook({"waId": "919876543210", "status": "delivered"}).status_code == 200
     roi = client.get(f"/workspaces/{ws}/campaigns/{cid}", headers=hdr).json()
     assert roi["delivered"] == 1
 
-    # --- Webhook: inbound reply ---
-    reply = json.dumps(
-        {"entry": [{"changes": [{"value": {
-            "messages": [{"from": "919876543210", "type": "text", "text": {"body": "Yes book me!"}}],
-        }}]}]}
-    ).encode()
-    r = client.post(
-        "/webhooks/whatsapp", content=reply,
-        headers={"X-Hub-Signature-256": _sign(reply, "APPSECRET"), "Content-Type": "application/json"},
-    )
-    assert r.status_code == 200
+    # --- Inbound reply ---
+    assert post_webhook({"waId": "919876543210", "text": "Yes, book me!"}).status_code == 200
     roi = client.get(f"/workspaces/{ws}/campaigns/{cid}", headers=hdr).json()
     assert roi["replied"] == 1
-
-    # --- Bad signature rejected ---
-    r = client.post(
-        "/webhooks/whatsapp", content=reply,
-        headers={"X-Hub-Signature-256": "sha256=deadbeef", "Content-Type": "application/json"},
-    )
-    assert r.status_code == 403
 
     # --- Mark booked → revenue = 1 x avg_ticket (800) ---
     mid = roi["messages"][0]["id"]
     client.post(f"/workspaces/{ws}/campaigns/{cid}/messages/{mid}/booked?booked=true", headers=hdr)
     roi = client.get(f"/workspaces/{ws}/campaigns/{cid}", headers=hdr).json()
-    assert roi["booked"] == 1
-    assert roi["estimated_revenue"] == 800.0
+    assert roi["booked"] == 1 and roi["estimated_revenue"] == 800.0

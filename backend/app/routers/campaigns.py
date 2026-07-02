@@ -12,9 +12,9 @@ from app.db import SessionLocal, get_db
 from app.deps import get_scoped_workspace, require_workspace_admin
 from app.models import Campaign, CampaignStatus, Contact, Message, MessageStatus, Workspace
 from app.schemas import CampaignCreate, CampaignOut, CampaignRoi, MessageOut
+from app.services.aisensy import AiSensyError, is_configured, resolve_api_key, send_campaign_message
 from app.services.lapsed import get_lapsed_contacts
 from app.services.roi import build_roi
-from app.services.whatsapp import WhatsAppError, is_configured, send_template
 
 logger = logging.getLogger("campaigns")
 router = APIRouter(prefix="/workspaces/{workspace_id}/campaigns", tags=["campaigns"])
@@ -32,7 +32,10 @@ def _dispatch_campaign(campaign_id: int, workspace_id: int) -> None:
         db.commit()
 
         contacts = get_lapsed_contacts(db, workspace)
-        body_params = [campaign.discount_offer] if campaign.discount_offer else None
+        api_key = resolve_api_key(workspace) or ""
+        # AiSensy fills the template's variables from templateParams in order;
+        # v1 exposes a single discount/offer variable.
+        template_params = [campaign.discount_offer] if campaign.discount_offer else None
         any_ok = False
 
         for contact in contacts:
@@ -43,16 +46,17 @@ def _dispatch_campaign(campaign_id: int, workspace_id: int) -> None:
                 status=MessageStatus.sent,
             )
             try:
-                wamid = send_template(
-                    phone_number_id=workspace.whatsapp_phone_number_id or "",
-                    to_phone=contact.phone,
-                    template_name=campaign.template_name,
-                    body_params=body_params,
+                msg_id = send_campaign_message(
+                    api_key=api_key,
+                    campaign_name=campaign.template_name,  # AiSensy Live campaign name
+                    destination=contact.phone,
+                    user_name=contact.name,
+                    template_params=template_params,
                 )
-                msg.whatsapp_message_id = wamid
+                msg.whatsapp_message_id = msg_id  # may be None (AiSensy)
                 msg.status = MessageStatus.sent
                 any_ok = True
-            except WhatsAppError as exc:
+            except AiSensyError as exc:
                 msg.status = MessageStatus.failed
                 msg.error_detail = str(exc)  # loud, visible failure (PRD §10)
                 logger.error("Campaign %s contact %s failed: %s", campaign.id, contact.id, exc)
@@ -86,15 +90,11 @@ def create_and_send(
     workspace: Workspace = Depends(require_workspace_admin),
     db: Session = Depends(get_db),
 ):
-    if not is_configured():
+    if not is_configured(workspace):
         raise HTTPException(
             status_code=503,
-            detail="WhatsApp is not configured (set WHATSAPP_ACCESS_TOKEN).",
-        )
-    if not workspace.whatsapp_phone_number_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Workspace has no whatsapp_phone_number_id configured.",
+            detail="AiSensy is not configured. Set the workspace's AiSensy API "
+            "key (or the AISENSY_API_KEY env var).",
         )
 
     campaign = Campaign(

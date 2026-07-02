@@ -75,9 +75,9 @@ def test_lapsed_detection_respects_threshold(client, seeded):
     assert "+919000000001" not in phones
 
 
-def test_campaign_requires_whatsapp_config(client, seeded, monkeypatch):
+def test_campaign_requires_aisensy_config(client, seeded, monkeypatch):
     hdr = login(client, seeded["admin_a"])
     ws = seeded["ws_a"]
-    # No WHATSAPP_ACCESS_TOKEN configured in tests → 503
+    # No AiSensy key on the workspace and no global env key → 503
     r = client.post(f"/workspaces/{ws}/campaigns", json={"template_name": "t"}, headers=hdr)
     assert r.status_code == 503
